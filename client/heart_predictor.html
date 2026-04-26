@@ -1,0 +1,549 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CardioPredict — CVD Risk Assessment</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600;9..40,700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --red:#E24B4A; --red-d:#A32D2D; --red-l:#FCEBEB; --red-m:#F09595;
+  --amber:#EF9F27; --amber-l:#FAEEDA; --amber-m:#FAC775;
+  --teal:#1D9E75; --teal-l:#E1F5EE; --teal-m:#5DCAA5;
+  --blue:#378ADD; --blue-l:#E6F1FB; --blue-m:#85B7EB;
+  --gray-l:#F4F3EF; --gray-m:#D3D1C7; --gray:#888780;
+  --bg:#f8f7f5; --surface:#fff;
+  --text:#1a1a18; --muted:#5F5E5A; --faint:#888780;
+  --border:rgba(0,0,0,.08); --border-s:rgba(0,0,0,.14);
+  --r:14px; --r-sm:10px;
+  --sh:0 2px 12px rgba(0,0,0,.06);
+}
+body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);font-size:15px;line-height:1.6;min-height:100vh}
+
+/* ── NAV ── */
+nav{background:var(--surface);border-bottom:1px solid var(--border);padding:0 2rem;display:flex;align-items:center;justify-content:space-between;height:60px;position:sticky;top:0;z-index:200}
+.nav-left{display:flex;align-items:center;gap:10px}
+.nav-icon{width:36px;height:36px;background:var(--red);border-radius:10px;display:flex;align-items:center;justify-content:center}
+.nav-icon svg{width:20px;height:20px}
+.nav-brand{font-family:'DM Serif Display',serif;font-size:1.3rem;letter-spacing:-.01em}
+.nav-sub{font-size:11px;color:var(--faint);margin-top:-2px}
+.nav-badge{background:var(--red-l);color:var(--red-d);font-size:11px;font-weight:600;padding:4px 12px;border-radius:20px;border:1px solid rgba(226,75,74,.15)}
+
+/* ── DATASET STATS STRIP ── */
+.ds-strip{display:grid;grid-template-columns:repeat(4,1fr);background:var(--surface);border-bottom:1px solid var(--border);padding:1rem 2rem;gap:1px}
+.ds-cell{text-align:center;border-right:1px solid var(--border)}
+.ds-cell:last-child{border-right:none}
+.ds-num{font-family:'DM Serif Display',serif;font-size:1.5rem;color:var(--text);line-height:1}
+.ds-lbl{font-size:10px;text-transform:uppercase;letter-spacing:.07em;color:var(--faint);margin-top:4px;font-weight:600}
+@media(max-width:700px){.ds-strip{grid-template-columns:1fr 1fr}}
+
+/* ── LAYOUT ── */
+.layout{display:grid;grid-template-columns:420px 1fr;min-height:calc(100vh - 108px)}
+@media(max-width:900px){.layout{grid-template-columns:1fr}}
+
+/* ── FORM PANEL ── */
+.form-panel{background:var(--surface);border-right:1px solid var(--border);padding:2rem;overflow-y:auto;max-height:calc(100vh - 108px);position:sticky;top:108px}
+@media(max-width:900px){.form-panel{position:static;max-height:none;border-right:none;border-bottom:1px solid var(--border)}}
+.form-header{margin-bottom:1.5rem}
+.form-header h2{font-family:'DM Serif Display',serif;font-size:1.6rem;letter-spacing:-.01em}
+.form-header p{font-size:13px;color:var(--faint);margin-top:4px}
+.form-section{margin-bottom:1.5rem}
+.section-title{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--faint);margin-bottom:.75rem;padding-bottom:.5rem;border-bottom:1px solid var(--border)}
+.field{margin-bottom:1rem}
+.field label{display:block;font-size:13px;color:var(--muted);margin-bottom:5px;font-weight:500}
+.slider-val{display:flex;justify-content:space-between;align-items:center;margin-bottom:5px}
+.val-num{font-size:14px;font-weight:600;color:var(--text)}
+.val-unit{font-size:12px;color:var(--faint)}
+.field-row{display:grid;grid-template-columns:1fr 1fr;gap:.75rem}
+
+/* ── RANGE SLIDER ── */
+input[type=range]{-webkit-appearance:none;width:100%;height:5px;border-radius:3px;background:var(--gray-m);outline:none;cursor:pointer}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:18px;height:18px;border-radius:50%;background:var(--red);cursor:pointer;border:2.5px solid #fff;box-shadow:0 1px 5px rgba(0,0,0,.2)}
+
+/* ── TOGGLE BUTTONS ── */
+.toggle-group{display:flex;gap:6px}
+.toggle-btn{flex:1;padding:9px;border-radius:10px;border:1px solid var(--border-s);background:var(--surface);font-size:13px;color:var(--muted);cursor:pointer;transition:.15s;font-family:inherit;font-weight:500}
+.toggle-btn:hover{background:var(--gray-l)}
+.toggle-btn.active.teal{background:var(--teal);color:#fff;border-color:var(--teal)}
+.toggle-btn.active.red{background:var(--red);color:#fff;border-color:var(--red)}
+
+/* ── SELECT / INPUT NUMBER ── */
+select,input[type=number]{width:100%;padding:9px 12px;border-radius:var(--r-sm);border:1px solid var(--border-s);background:var(--surface);font-size:14px;color:var(--text);font-family:inherit;outline:none;transition:.15s}
+select{-webkit-appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8'%3E%3Cpath fill='%23888780' d='M1 1l5 5 5-5'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 12px center;padding-right:32px;cursor:pointer}
+select:focus,input[type=number]:focus{border-color:var(--red);box-shadow:0 0 0 3px rgba(226,75,74,.1)}
+
+/* ── PREDICT BUTTON ── */
+.predict-btn{width:100%;padding:15px;border-radius:var(--r);background:var(--red);color:#fff;border:none;font-size:15px;font-weight:700;font-family:inherit;cursor:pointer;transition:.2s;display:flex;align-items:center;justify-content:center;gap:10px;box-shadow:0 6px 20px rgba(226,75,74,.25);letter-spacing:-.01em}
+.predict-btn:hover{background:var(--red-d);transform:translateY(-1px);box-shadow:0 10px 28px rgba(226,75,74,.32)}
+.predict-btn:active{transform:none}
+
+/* ── RESULTS PANEL ── */
+.results-panel{padding:2.5rem;overflow-y:auto;background:#faf9f7}
+
+/* ── PLACEHOLDER ── */
+.placeholder{display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;min-height:420px;gap:1rem;color:var(--faint);text-align:center}
+.placeholder-icon{width:80px;height:80px;border-radius:50%;background:var(--gray-l);display:flex;align-items:center;justify-content:center}
+.placeholder h3{font-size:1.15rem;color:var(--muted)}
+.placeholder p{font-size:13px;max-width:300px}
+
+/* ── RESULT CARDS ── */
+.result-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:2rem;margin-bottom:1.25rem;box-shadow:var(--sh);animation:slIn .3s ease}
+@keyframes slIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+.card-title{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--faint);margin-bottom:1.25rem}
+
+/* ── STATS BAR ── */
+.stats-bar{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--border);border:1px solid var(--border);border-radius:var(--r);overflow:hidden;margin-bottom:1.25rem;box-shadow:var(--sh)}
+.stat-cell{background:var(--surface);padding:1rem 1.25rem;text-align:center}
+.stat-num{font-family:'DM Serif Display',serif;font-size:1.5rem;color:var(--text)}
+.stat-lbl{font-size:11px;color:var(--faint);margin-top:2px}
+
+/* ── GAUGE ── */
+.gauge-wrap{position:relative;width:200px;height:110px;margin:0 auto 1rem}
+.gauge-wrap canvas{position:absolute;top:0;left:0}
+.gauge-pct{position:absolute;bottom:0;left:50%;transform:translateX(-50%);font-family:'DM Serif Display',serif;font-size:2.2rem;line-height:1}
+.gauge-lbl{text-align:center;font-size:12px;color:var(--faint);margin-top:4px}
+.risk-level{font-family:'DM Serif Display',serif;font-size:2.4rem;text-align:center;margin:.5rem 0 .25rem}
+.risk-level.low{color:var(--teal)}
+.risk-level.moderate{color:var(--amber)}
+.risk-level.high{color:var(--red)}
+.risk-pct-text{text-align:center;font-size:14px;color:var(--faint);margin-bottom:1.5rem}
+.risk-bar-wrap{height:10px;background:var(--gray-m);border-radius:5px;overflow:hidden;max-width:300px;margin:0 auto .5rem}
+.risk-bar-fill{height:100%;border-radius:5px;transition:width .9s cubic-bezier(.34,1.56,.64,1)}
+.risk-markers{display:flex;justify-content:space-between;font-size:10px;color:var(--faint);max-width:300px;margin:0 auto}
+
+/* ── FACTOR BARS ── */
+.factor-row{margin-bottom:9px}
+.factor-header{display:flex;justify-content:space-between;font-size:13px;margin-bottom:3px}
+.factor-name{color:var(--muted);font-weight:500}
+.factor-track{height:5px;background:var(--gray-l);border-radius:3px;overflow:hidden}
+.factor-fill{height:100%;border-radius:3px;transition:width .6s ease .2s}
+
+/* ── ADVICE GRID ── */
+.advice-grid{display:grid;grid-template-columns:1fr 1fr;gap:.75rem;margin-top:.5rem}
+@media(max-width:600px){.advice-grid{grid-template-columns:1fr}}
+.advice-card{border-radius:var(--r-sm);padding:.875rem 1rem;font-size:13px;line-height:1.5}
+.advice-card strong{display:block;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;margin-bottom:3px}
+.advice-card.danger{background:var(--red-l);color:#713030;border:1px solid var(--red-m)}
+.advice-card.warning{background:var(--amber-l);color:#633806;border:1px solid var(--amber-m)}
+.advice-card.good{background:var(--teal-l);color:#085041;border:1px solid var(--teal-m)}
+.advice-card.info{background:var(--blue-l);color:#0C447C;border:1px solid var(--blue-m)}
+
+/* ── TRAINED BADGE ── */
+.trained-badge{display:inline-flex;align-items:center;gap:5px;background:#f1f5f9;color:#475569;font-size:10px;font-weight:700;padding:4px 10px;border-radius:6px;vertical-align:middle;margin-left:8px}
+
+/* ── DATA SOURCES CARD ── */
+.sources-card{background:#1e293b;color:#f8fafc;border-radius:var(--r);padding:2rem;margin-top:1.25rem}
+.sources-card h4{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.12em;color:#94a3b8;margin-bottom:1.25rem}
+.source-row{display:flex;justify-content:space-between;align-items:center;padding:.75rem 0;border-bottom:1px solid rgba(255,255,255,.1)}
+.source-row:last-child{border-bottom:none}
+.source-name{font-weight:600;font-size:13px;color:#e2e8f0}
+.source-meta{font-size:11px;color:#64748b}
+
+/* ── DISCLAIMER ── */
+.disclaimer{font-size:12px;color:var(--faint);border:1px solid var(--border);border-radius:var(--r-sm);padding:.75rem 1rem;margin-top:1rem;background:var(--gray-l)}
+</style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav>
+  <div class="nav-left">
+    <div class="nav-icon">
+      <svg viewBox="0 0 24 24" fill="none"><path d="M12 21.593c-5.63-5.539-11-10.297-11-14.402C1 3.514 3.393 1 6.9 1c2.04 0 3.718 1.24 5.1 3.02C13.382 2.24 15.062 1 17.1 1 20.607 1 23 3.514 23 7.191c0 4.105-5.371 8.863-11 14.402z" fill="white"/></svg>
+    </div>
+    <div>
+      <div class="nav-brand">CardioPredict</div>
+      <div class="nav-sub">AI-powered CVD risk assessment</div>
+    </div>
+  </div>
+  <div class="nav-badge">Trained on 1,529 patients · 66.1% accuracy · AUC 0.703</div>
+</nav>
+
+<!-- DATASET STATS STRIP -->
+<div class="ds-strip">
+  <div class="ds-cell"><div class="ds-num">1,529</div><div class="ds-lbl">Total Records</div></div>
+  <div class="ds-cell"><div class="ds-num">47.6%</div><div class="ds-lbl">High-risk Patients</div></div>
+  <div class="ds-cell"><div class="ds-num">125.6</div><div class="ds-lbl">Avg Systolic BP (mmHg)</div></div>
+  <div class="ds-cell"><div class="ds-num">29.85</div><div class="ds-lbl">Avg BMI (High-risk)</div></div>
+</div>
+
+<div class="layout">
+
+  <!-- FORM PANEL -->
+  <div class="form-panel">
+    <div class="form-header">
+      <h2>Enter Patient Details</h2>
+      <p>Adjust values and click Predict to assess cardiovascular risk</p>
+    </div>
+
+    <!-- Demographics -->
+    <div class="form-section">
+      <div class="section-title">Demographics</div>
+      <div class="field">
+        <div class="slider-val"><label>Age</label><span class="val-num" id="age-val">45</span><span class="val-unit"> years</span></div>
+        <input type="range" id="age" min="20" max="80" value="45" oninput="syncVal('age','age-val')">
+      </div>
+      <div class="field">
+        <label>Gender</label>
+        <div class="toggle-group" id="gender-group">
+          <button class="toggle-btn active teal" data-val="0" onclick="pickToggle('gender-group',this)">Female</button>
+          <button class="toggle-btn" data-val="1" onclick="pickToggle('gender-group',this)">Male</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Body -->
+    <div class="form-section">
+      <div class="section-title">Body Measurements</div>
+      <div class="field-row">
+        <div class="field"><label>Height (cm)</label><input type="number" id="height" value="168" min="130" max="220" oninput="calcBMI()"></div>
+        <div class="field"><label>Weight (kg)</label><input type="number" id="weight" value="70" min="30" max="200" oninput="calcBMI()"></div>
+      </div>
+      <div class="field">
+        <div class="slider-val">
+          <label>BMI <span style="font-size:11px;color:var(--faint)">(auto-calculated)</span></label>
+          <span class="val-num" id="bmi-val">24.8</span>
+        </div>
+        <div style="height:5px;border-radius:3px;background:var(--gray-m);overflow:hidden">
+          <div id="bmi-bar" style="height:100%;border-radius:3px;background:var(--teal);width:40%;transition:.3s"></div>
+        </div>
+        <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--faint);margin-top:4px">
+          <span>Underweight &lt;18.5</span><span>Normal 18.5–25</span><span>Obese &gt;30</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Blood Pressure -->
+    <div class="form-section">
+      <div class="section-title">Blood Pressure</div>
+      <div class="field">
+        <div class="slider-val"><label>Systolic (ap_hi)</label><span class="val-num" id="sys-val">120</span><span class="val-unit"> mmHg</span></div>
+        <input type="range" id="ap_hi" min="80" max="220" value="120" oninput="syncVal('ap_hi','sys-val')">
+      </div>
+      <div class="field">
+        <div class="slider-val"><label>Diastolic (ap_lo)</label><span class="val-num" id="dia-val">80</span><span class="val-unit"> mmHg</span></div>
+        <input type="range" id="ap_lo" min="40" max="140" value="80" oninput="syncVal('ap_lo','dia-val')">
+      </div>
+    </div>
+
+    <!-- Lab Values -->
+    <div class="form-section">
+      <div class="section-title">Lab Values</div>
+      <div class="field">
+        <label>Cholesterol Level</label>
+        <select id="cholesterol">
+          <option value="1">Normal (≤200 mg/dL)</option>
+          <option value="2">Above Normal (200–240 mg/dL)</option>
+          <option value="3">Well Above Normal (&gt;240 mg/dL)</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Glucose / Blood Sugar</label>
+        <select id="glucose">
+          <option value="1">Normal (≤100 mg/dL)</option>
+          <option value="2">Pre-diabetic (100–126 mg/dL)</option>
+          <option value="3">Diabetic range (&gt;126 mg/dL)</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- Lifestyle -->
+    <div class="form-section">
+      <div class="section-title">Lifestyle</div>
+      <div class="field">
+        <label>Smoking</label>
+        <div class="toggle-group" id="smoke-group">
+          <button class="toggle-btn active teal" data-val="0" onclick="pickToggle('smoke-group',this)">Non-smoker</button>
+          <button class="toggle-btn" data-val="1" onclick="pickToggle('smoke-group',this)">Smoker</button>
+        </div>
+      </div>
+      <div class="field" style="margin-top:.75rem">
+        <label>Physical Activity</label>
+        <div class="toggle-group" id="active-group">
+          <button class="toggle-btn" data-val="0" onclick="pickToggle('active-group',this)">Inactive</button>
+          <button class="toggle-btn active teal" data-val="1" onclick="pickToggle('active-group',this)">Active</button>
+        </div>
+      </div>
+    </div>
+
+    <button class="predict-btn" onclick="predict()">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+      Predict CVD Risk
+    </button>
+    <div class="disclaimer" style="margin-top:1rem"><strong>Disclaimer:</strong> For educational purposes only. Not a substitute for clinical diagnosis. Always consult a qualified healthcare professional.</div>
+  </div>
+
+  <!-- RESULTS PANEL -->
+  <div class="results-panel" id="results-panel">
+    <div class="placeholder" id="placeholder">
+      <div class="placeholder-icon">
+        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#888780" stroke-width="1.5" stroke-linecap="round"><path d="M12 21.593c-5.63-5.539-11-10.297-11-14.402C1 3.514 3.393 1 6.9 1c2.04 0 3.718 1.24 5.1 3.02C13.382 2.24 15.062 1 17.1 1 20.607 1 23 3.514 23 7.191c0 4.105-5.371 8.863-11 14.402z"/></svg>
+      </div>
+      <h3>No prediction yet</h3>
+      <p>Fill in the patient details and click "Predict CVD Risk" to see results.</p>
+    </div>
+
+    <div id="result-content" style="display:none">
+
+      <!-- Model stats bar -->
+      <div class="stats-bar">
+        <div class="stat-cell"><div class="stat-num">66.1%</div><div class="stat-lbl">Model Accuracy</div></div>
+        <div class="stat-cell"><div class="stat-num">0.703</div><div class="stat-lbl">AUC-ROC Score</div></div>
+        <div class="stat-cell"><div class="stat-num">1,529</div><div class="stat-lbl">Training Records</div></div>
+      </div>
+
+      <!-- Prediction gauge card -->
+      <div class="result-card">
+        <div class="card-title">Prediction Result</div>
+        <div class="gauge-wrap">
+          <canvas id="gaugeChart" width="200" height="110"></canvas>
+          <div class="gauge-pct" id="gauge-pct" style="color:var(--red)">—</div>
+        </div>
+        <div class="gauge-lbl">CVD probability score</div>
+        <div class="risk-level" id="risk-level">—</div>
+        <div class="risk-pct-text" id="risk-pct-text"></div>
+        <div>
+          <div class="risk-bar-wrap"><div class="risk-bar-fill" id="risk-bar" style="width:0;background:var(--red)"></div></div>
+          <div class="risk-markers"><span>Low risk</span><span>Moderate</span><span>High risk</span></div>
+        </div>
+      </div>
+
+      <!-- Key Contributing Factors -->
+      <div class="result-card">
+        <div class="card-title">Key Contributing Factors</div>
+        <div id="factors-list"></div>
+      </div>
+
+      <!-- Clinical observations -->
+      <div class="result-card">
+        <div class="card-title">Clinical Observations</div>
+        <div class="advice-grid" id="advice-grid"></div>
+      </div>
+
+      <!-- Feature importance -->
+      <div class="result-card">
+        <div class="card-title">
+          Model — Feature Importances (Trained LR)
+          <span class="trained-badge">
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+            Trained on 1,529 patients · 66.1% acc · AUC 0.703
+          </span>
+        </div>
+        <div style="position:relative;height:220px"><canvas id="fiChart"></canvas></div>
+      </div>
+
+      <!-- Data Sources -->
+      <div class="sources-card">
+        <h4>Training Data Sources</h4>
+        <div class="source-row">
+          <span class="source-name">CVD Dataset.csv</span>
+          <span class="source-meta">1,529 patients · HIGH / INTERMEDIARY / LOW stratification</span>
+        </div>
+        <div class="source-row">
+          <span class="source-name">Features Used</span>
+          <span class="source-meta">Age, BMI, Gender, Cholesterol, Glucose, Smoking, Activity, BP</span>
+        </div>
+        <div class="source-row">
+          <span class="source-name">Algorithm</span>
+          <span class="source-meta">Logistic Regression · StandardScaler · 80/20 train-test split</span>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<script>
+// ── REAL TRAINED MODEL (CVD Dataset.csv — 1,251 clean records) ──
+const MODEL = {
+  coef:      [0.201488, 0.45017, -0.085719, 0.335099, -0.066368, 0.53813, -0.422436, -0.151124, -0.10557],
+  intercept: -0.076462,
+  means:     [47.028, 28.5279, 0.484, 1.849, 2.057, 0.529, 0.679, 125.44, 83.113],
+  stds:      [12.5624, 7.0819, 0.4997, 0.8945, 0.8519, 0.4992, 0.4669, 22.0038, 14.8462],
+  features:  ['age_years','bmi','gender','cholesterol','glucose','smoking','active','systolic','diastolic'],
+  labels:    ['Age','BMI','Gender','Cholesterol','Glucose','Smoking','Activity','Systolic BP','Diastolic BP'],
+};
+
+// Feature importances (% share of |coef| weight)
+const FI = {
+  'Smoking':     22.8,
+  'BMI':         19.1,
+  'Activity':    17.9,
+  'Cholesterol': 14.2,
+  'Age':          8.6,
+  'Systolic BP':  6.4,
+  'Diastolic BP': 4.5,
+  'Gender':       3.6,
+  'Glucose':      2.8,
+};
+
+function sigmoid(x) { return 1 / (1 + Math.exp(-x)); }
+
+function predict() {
+  const age    = +document.getElementById('age').value;
+  const h      = +document.getElementById('height').value;
+  const w      = +document.getElementById('weight').value;
+  const bmi    = w / ((h/100)**2);
+  const gender = +getToggle('gender-group');
+  const chol   = +document.getElementById('cholesterol').value;
+  const gluc   = +document.getElementById('glucose').value;
+  const smoke  = +getToggle('smoke-group');
+  const active = +getToggle('active-group');
+  const ap_hi  = +document.getElementById('ap_hi').value;
+  const ap_lo  = +document.getElementById('ap_lo').value;
+
+  const raw = [age, bmi, gender, chol, gluc, smoke, active, ap_hi, ap_lo];
+  const z   = raw.map((v,i) => (v - MODEL.means[i]) / MODEL.stds[i]);
+  const logit = z.reduce((s,v,i) => s + v*MODEL.coef[i], MODEL.intercept);
+  const prob  = sigmoid(logit);
+  const contributions = raw.map((v,i) => ({ label: MODEL.labels[i], contribution: z[i]*MODEL.coef[i] }));
+
+  showResult(prob, contributions, { age, bmi, chol, gluc, smoke, active, ap_hi, ap_lo });
+}
+
+function showResult(prob, contributions, vals) {
+  document.getElementById('placeholder').style.display  = 'none';
+  document.getElementById('result-content').style.display = 'block';
+
+  const pct = Math.round(prob * 100);
+  let level, color, cls;
+  if (prob < 0.35)      { level='Low Risk';      color='#1D9E75'; cls='low'; }
+  else if (prob < 0.6)  { level='Moderate Risk'; color='#EF9F27'; cls='moderate'; }
+  else                  { level='High Risk';      color='#E24B4A'; cls='high'; }
+
+  drawGauge(prob, color);
+  document.getElementById('gauge-pct').textContent = pct+'%';
+  document.getElementById('gauge-pct').style.color  = color;
+
+  const rl = document.getElementById('risk-level');
+  rl.textContent = level; rl.className = 'risk-level '+cls;
+  document.getElementById('risk-pct-text').textContent = `${pct}% estimated probability of cardiovascular disease`;
+  setTimeout(() => { const b=document.getElementById('risk-bar'); b.style.width=pct+'%'; b.style.background=color; }, 50);
+
+  // Factor bars
+  const sorted = [...contributions].sort((a,b)=>Math.abs(b.contribution)-Math.abs(a.contribution)).slice(0,6);
+  const maxC   = Math.max(...sorted.map(f=>Math.abs(f.contribution)));
+  document.getElementById('factors-list').innerHTML = sorted.map(f => {
+    const isRisk = f.contribution > 0;
+    const bc = isRisk ? '#E24B4A' : '#1D9E75';
+    const w  = maxC>0 ? Math.round(Math.abs(f.contribution)/maxC*100) : 0;
+    return `<div class="factor-row">
+      <div class="factor-header"><span class="factor-name">${f.label}</span><span style="font-weight:500;color:${bc}">${isRisk?'+ Risk':'− Risk'}</span></div>
+      <div class="factor-track"><div class="factor-fill" style="width:${w}%;background:${bc}"></div></div>
+    </div>`;
+  }).join('');
+
+  // Advice cards with real dataset statistics
+  const advice = [];
+  if (vals.ap_hi >= 140)
+    advice.push({t:'danger', title:'High BP', text:'Systolic ≥140 mmHg — Stage 2 hypertension. Dataset avg is 125.6 mmHg.'});
+  else if (vals.ap_hi >= 130)
+    advice.push({t:'warning', title:'Elevated BP', text:'Systolic 130–139 mmHg — Stage 1 hypertension. Consider lifestyle modification.'});
+  else
+    advice.push({t:'good', title:'Normal BP', text:'Systolic < 130 mmHg — blood pressure within healthy range.'});
+
+  if (vals.chol==3)
+    advice.push({t:'danger', title:'High Cholesterol', text:'Level 3 cholesterol — 57.7% HIGH-risk rate in our dataset. Urgent review.'});
+  else if (vals.chol==2)
+    advice.push({t:'warning', title:'Borderline Cholesterol', text:'Level 2 cholesterol — 53.0% HIGH-risk rate. Diet and exercise help.'});
+  else
+    advice.push({t:'good', title:'Normal Cholesterol', text:'Cholesterol within normal range — continue healthy diet habits.'});
+
+  if (vals.gluc==3)
+    advice.push({t:'danger', title:'Diabetic Range', text:'Diabetic blood sugar level raises CVD risk score significantly.'});
+  else if (vals.gluc==2)
+    advice.push({t:'warning', title:'Pre-diabetic', text:'Pre-diabetic blood sugar — monitor glucose and reduce refined carbs.'});
+
+  if (!vals.active)
+    advice.push({t:'warning', title:'Inactive', text:'Inactive patients show a 60.7% HIGH-risk rate vs 41.3% in active patients (19.3% diff).'});
+  else
+    advice.push({t:'good', title:'Physically Active', text:'Active patients show 41.3% HIGH-risk rate — 19.3% lower than inactive peers.'});
+
+  if (vals.smoke)
+    advice.push({t:'danger', title:'Active Smoker', text:'Smoking has the highest model coefficient weight (22.8%) in our dataset.'});
+  else
+    advice.push({t:'good', title:'Non-smoker', text:'Non-smoking significantly reduces cardiovascular risk burden.'});
+
+  if (vals.bmi >= 30)
+    advice.push({t:'warning', title:`BMI ${vals.bmi.toFixed(1)} — Obese`, text:'Average BMI for HIGH-risk patients in our dataset is 29.85. Weight reduction recommended.'});
+  else if (vals.bmi < 18.5)
+    advice.push({t:'info', title:`BMI ${vals.bmi.toFixed(1)} — Underweight`, text:'Consider nutritional assessment and healthy weight gain strategies.'});
+  else
+    advice.push({t:'good', title:`BMI ${vals.bmi.toFixed(1)} — Healthy`, text:'BMI within healthy range (18.5–25). Dataset high-risk avg is 29.85.'});
+
+  document.getElementById('advice-grid').innerHTML = advice.slice(0,6).map(a=>
+    `<div class="advice-card ${a.t}"><strong>${a.title}</strong>${a.text}</div>`
+  ).join('');
+
+  // Feature importance chart (draw once)
+  if (!window._fiDrawn) { buildFIChart(); window._fiDrawn = true; }
+  document.getElementById('result-content').scrollIntoView({behavior:'smooth',block:'start'});
+}
+
+function drawGauge(prob, color) {
+  const cv = document.getElementById('gaugeChart');
+  const ctx = cv.getContext('2d');
+  ctx.clearRect(0,0,200,110);
+  const cx=100, cy=100, r=80, lw=13;
+  ctx.beginPath(); ctx.arc(cx,cy,r,Math.PI,2*Math.PI);
+  ctx.strokeStyle='#E8E6E0'; ctx.lineWidth=lw; ctx.lineCap='round'; ctx.stroke();
+  ctx.beginPath(); ctx.arc(cx,cy,r,Math.PI,Math.PI+prob*Math.PI);
+  ctx.strokeStyle=color; ctx.lineWidth=lw; ctx.lineCap='round'; ctx.stroke();
+  [.35,.6].forEach(v => {
+    const a = Math.PI+v*Math.PI;
+    ctx.beginPath(); ctx.moveTo(cx+(r-9)*Math.cos(a),cy+(r-9)*Math.sin(a));
+    ctx.lineTo(cx+(r+1)*Math.cos(a),cy+(r+1)*Math.sin(a));
+    ctx.strokeStyle='#fff'; ctx.lineWidth=2; ctx.stroke();
+  });
+}
+
+function buildFIChart() {
+  const entries = Object.entries(FI).sort((a,b)=>b[1]-a[1]);
+  const labels  = entries.map(e=>e[0]);
+  const data    = entries.map(e=>e[1]);
+  const colors  = data.map(v => v>20?'#E24B4A':v>10?'#EF9F27':'#85B7EB');
+  new Chart(document.getElementById('fiChart'), {
+    type:'bar',
+    data:{labels,datasets:[{data,backgroundColor:colors,borderRadius:5,borderSkipped:false}]},
+    options:{
+      indexAxis:'y',responsive:true,maintainAspectRatio:false,
+      plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>` ${c.raw}% weight`}}},
+      scales:{x:{ticks:{callback:v=>v+'%'},grid:{color:'rgba(0,0,0,.04)'}},y:{grid:{display:false}}}
+    }
+  });
+}
+
+// ── Utilities ──────────────────────────────────────────────────
+function syncVal(slid, out) {
+  document.getElementById(out).textContent = document.getElementById(slid).value;
+}
+function calcBMI() {
+  const h = +document.getElementById('height').value;
+  const w = +document.getElementById('weight').value;
+  if (!h||!w) return;
+  const bmi = w/((h/100)**2);
+  document.getElementById('bmi-val').textContent = bmi.toFixed(1);
+  const pct = Math.min(100,Math.max(0,(bmi-10)/50*100));
+  const bar = document.getElementById('bmi-bar');
+  bar.style.width = pct+'%';
+  bar.style.background = bmi<18.5?'#378ADD':bmi<25?'#1D9E75':bmi<30?'#EF9F27':'#E24B4A';
+}
+function pickToggle(gid, btn) {
+  document.querySelectorAll('#'+gid+' .toggle-btn').forEach(b=>b.classList.remove('active','red','teal'));
+  btn.classList.add('active');
+  btn.classList.add(btn.dataset.val==='0'?'teal':'red');
+}
+function getToggle(gid) {
+  const a=document.querySelector('#'+gid+' .toggle-btn.active');
+  return a?a.dataset.val:'0';
+}
+
+// Init BMI
+document.getElementById('height').addEventListener('input',calcBMI);
+document.getElementById('weight').addEventListener('input',calcBMI);
+calcBMI();
+</script>
+</body>
+</html>
