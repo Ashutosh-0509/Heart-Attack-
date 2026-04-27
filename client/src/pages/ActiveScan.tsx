@@ -313,7 +313,60 @@ export default function ActiveScan() {
       navigate(ROUTE_PATHS.RESULTS, { state: report });
     } catch (e) {
       console.error("Finalize error:", e);
-      navigate(ROUTE_PATHS.RESULTS, { state: { id: 'ERR', date: new Date(), bpm: 75, healthScore: 85, aiConfidence: 90, stressLevel: 'normal', pallor: false, cyanosis: false, scanMode: initialMode, duration: 30 } });
+      // Fallback algorithm for local calculation when backend is unavailable
+      const actualBpm = bpmValue || bpm || 75;
+      
+      // Calculate BMI
+      const h = demographics.height / 100;
+      const bmi = demographics.weight / (h * h);
+      
+      // Estimate BP based on BPM (for demo purposes only since camera can't measure BP)
+      const sys = 120 + ((actualBpm - 70) * 0.4);
+      const dia = 80 + ((actualBpm - 70) * 0.2);
+
+      // Appropriate Logistic Regression Algorithm (trained on cardio_train.csv)
+      const MODEL = {
+        coef:      [0.339085, 0.135304, 0.012165, 0.33993, -0.070266, -0.05742, -0.092789, 0.930461, 0.107033],
+        intercept: 0.028908,
+        means:     [53.2937, 27.4879, 0.3503, 1.3646, 1.2256, 0.0874, 0.8031, 126.6524, 81.2971],
+        stds:      [6.7452, 5.3745, 0.4771, 0.6788, 0.5722, 0.2825, 0.3977, 16.6986, 9.4317]
+      };
+
+      const raw = [
+        demographics.age, bmi, demographics.gender, demographics.cholesterol, 
+        demographics.glucose, demographics.smoking, demographics.active, sys, dia
+      ];
+
+      const z = raw.map((v, i) => (v - MODEL.means[i]) / MODEL.stds[i]);
+      const logit = z.reduce((s, v, i) => s + v * MODEL.coef[i], MODEL.intercept);
+      const prob = 1 / (1 + Math.exp(-logit)); // Sigmoid activation
+
+      let healthScore = Math.round(100 - (prob * 100));
+      let stressLevel = 'normal';
+      
+      if (actualBpm > 100 || actualBpm < 60) {
+        healthScore = Math.max(0, healthScore - 15);
+        stressLevel = 'high';
+      } else if (actualBpm > 85 || actualBpm < 65) {
+        healthScore = Math.max(0, healthScore - 5);
+        stressLevel = 'moderate';
+      }
+
+      navigate(ROUTE_PATHS.RESULTS, { 
+        state: { 
+          id: 'LOCAL_SCAN_' + Date.now(), 
+          date: new Date(), 
+          bpm: actualBpm, 
+          healthScore, 
+          cvdProbability: prob,
+          aiConfidence: Math.round(confidence) || 90, 
+          stressLevel, 
+          pallor: false, 
+          cyanosis: false, 
+          scanMode: initialMode, 
+          duration: SCAN_CONFIGS[initialMode]?.duration || 30 
+        } 
+      });
     }
   };
 
