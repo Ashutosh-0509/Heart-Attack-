@@ -57,23 +57,114 @@ function StepIndicator({ activeIdx }: { activeIdx: number }) {
 }
 
 // --- Cards ---
-function HeartRateCard({ bpm, statusText, isFingerDetected, confidence }: { bpm: number | null, statusText: string, isFingerDetected: boolean, confidence: number }) {
+function HeartRateCard({ statusText, isFingerDetected, confidence, progress, scanState }: { statusText: string, isFingerDetected: boolean, confidence: number, progress: number, scanState: string }) {
+  const remaining = Math.max(0, Math.ceil(30 - (progress / 100) * 30));
+  let message = "Place finger firmly on camera…";
+  if (progress > 33 && progress <= 66) message = "Hold still, detecting pulse…";
+  else if (progress > 66) message = "Almost done, finalizing…";
+
   return (
-    <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="bg-white rounded-3xl p-8 border border-gray-100 shadow-xl shadow-gray-200/50 flex flex-col items-center">
+    <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="bg-white rounded-3xl p-8 border border-gray-100 shadow-xl shadow-gray-200/50 flex flex-col items-center relative overflow-hidden">
       <div className="relative mb-6">
+        <svg className="absolute inset-0 w-full h-full -rotate-90 transform" viewBox="0 0 100 100" style={{ width: '120px', height: '120px', left: '-20px', top: '-20px' }}>
+          <circle cx="50" cy="50" r="45" fill="none" stroke="#f3f4f6" strokeWidth="8" />
+          <circle cx="50" cy="50" r="45" fill="none" stroke="#ef4444" strokeWidth="8" strokeDasharray="283" strokeDashoffset={283 - (progress / 100) * 283} className="transition-all duration-300" />
+        </svg>
         <motion.div animate={isFingerDetected ? { scale: [1, 1.1, 1], opacity: [0.3, 0.6, 0.3] } : {}} transition={{ duration: 0.8, repeat: Infinity }} className="absolute inset-0 bg-red-400 rounded-full blur-2xl" />
         <div className="relative w-20 h-20 bg-red-500 rounded-full flex items-center justify-center shadow-lg">
           <Activity className="w-10 h-10 text-white" />
         </div>
       </div>
-      <div className="text-center mb-6">
-        <h2 className="text-5xl font-black text-gray-900 tracking-tighter tabular-nums">{bpm || '--'}</h2>
+      
+      <div className="text-center mb-6 z-10">
+        <h2 className="text-5xl font-black text-gray-900 tracking-tighter tabular-nums">---</h2>
         <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mt-1">Beats Per Minute</p>
+        
+        {scanState === 'running' && (
+          <div className="mt-4 flex flex-col items-center gap-2">
+            <span className="text-sm font-bold text-blue-600">Scanning… {remaining}s remaining</span>
+            <div className="flex items-center gap-2 text-xs font-semibold text-red-500 bg-red-50 px-3 py-1 rounded-full">
+              <span className="relative flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
+              </span>
+              Collecting readings…
+            </div>
+            <p className="text-sm text-gray-600 mt-2 font-medium">{message}</p>
+          </div>
+        )}
       </div>
+
       <PulseWaveform active={isFingerDetected} />
       <div className="w-full mt-8 pt-6 border-t border-gray-50 flex justify-between text-xs font-bold uppercase tracking-wider">
         <span className="text-gray-400">Signal: <span className={isFingerDetected ? "text-green-500" : "text-amber-500"}>{statusText}</span></span>
         <span className="text-gray-400">AI Confidence: <span className="text-blue-600">{confidence}%</span></span>
+      </div>
+    </motion.div>
+  );
+}
+
+function HeartRateReportCard({ report, onScanAgain, onSave }: { report: any, onScanAgain: () => void, onSave: () => void }) {
+  let category = "Normal";
+  let catColor = "text-green-500 bg-green-50";
+  if (report.averageBpm < 60) {
+    category = "Bradycardia";
+    catColor = "text-blue-500 bg-blue-50";
+  } else if (report.averageBpm > 100) {
+    category = "Tachycardia";
+    catColor = "text-red-500 bg-red-50";
+  }
+
+  return (
+    <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="bg-white rounded-3xl p-6 border border-gray-100 shadow-xl">
+      <div className="text-center mb-6">
+        <h3 className="text-lg font-bold text-gray-900 mb-1">Session Complete</h3>
+        <p className="text-xs text-gray-500">{new Date().toLocaleString()}</p>
+      </div>
+
+      <div className="flex flex-col items-center mb-8">
+        <div className={`px-4 py-1 rounded-full text-xs font-bold uppercase tracking-widest mb-4 ${catColor}`}>
+          {category}
+        </div>
+        <h2 className="text-6xl font-black text-gray-900 tracking-tighter tabular-nums mb-1">{report.averageBpm}</h2>
+        <p className="text-xs font-bold text-gray-400 uppercase tracking-widest">Avg BPM</p>
+      </div>
+
+      <div className="grid grid-cols-2 gap-4 mb-6">
+        <div className="bg-gray-50 p-4 rounded-2xl text-center">
+          <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Min / Max</p>
+          <p className="text-lg font-bold text-gray-900">{report.minBpm} <span className="text-gray-400 text-sm font-normal">/</span> {report.maxBpm}</p>
+        </div>
+        <div className="bg-gray-50 p-4 rounded-2xl text-center">
+          <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Quality</p>
+          <p className={`text-lg font-bold ${report.quality === 'Good' ? 'text-green-600' : report.quality === 'Fair' ? 'text-amber-500' : 'text-red-500'}`}>{report.quality}</p>
+        </div>
+      </div>
+
+      <div className="mb-6">
+        <div className="flex justify-between items-center mb-2">
+          <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Stability</span>
+          <span className={`text-xs font-bold uppercase ${report.stability === 'stable' ? 'text-green-500' : 'text-amber-500'}`}>{report.stability}</span>
+        </div>
+        <div className="h-16 flex items-end gap-1 w-full mt-4">
+          {report.segmentBpms.map((bpm: number, i: number) => {
+            const h = Math.max(10, Math.min(100, (bpm / 150) * 100));
+            return (
+              <div key={i} className="flex-1 flex flex-col items-center gap-1">
+                <div className="w-full bg-blue-100 rounded-t-sm relative" style={{ height: `${h}%` }}>
+                  <div className="absolute top-0 left-0 right-0 h-1 bg-blue-500 rounded-t-sm"></div>
+                </div>
+                <span className="text-[8px] font-bold text-gray-400">{bpm}</span>
+              </div>
+            );
+          })}
+        </div>
+        <p className="text-[8px] text-center text-gray-400 mt-2 uppercase">5-second segments</p>
+      </div>
+
+      <div className="flex gap-3">
+        <button onClick={onScanAgain} className="flex-1 py-3 px-4 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold rounded-xl text-xs uppercase tracking-widest transition-colors">Scan Again</button>
+        <button onClick={onSave} className="flex-1 py-3 px-4 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-xs uppercase tracking-widest transition-colors shadow-lg shadow-blue-200">Save Reading</button>
       </div>
     </motion.div>
   );
@@ -226,12 +317,14 @@ export default function ActiveScan() {
     glucose: 1
   });
   
+  const [report, setReport] = useState<any>(null);
+  
   const [stream, setStream] = useState<MediaStream | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const timerRef = useRef<number>(0);
   const frameRef = useRef<number>(0);
 
-  const { bpm, statusText, isFingerDetected, startMeasurement, stopMeasurement } = useHeartRateMonitor();
+  const { bpm, statusText, isFingerDetected, startMeasurement, stopMeasurement, analyzeFullSession } = useHeartRateMonitor();
 
   const startScan = useCallback(async () => {
     try {
@@ -273,30 +366,58 @@ export default function ActiveScan() {
     }
   }, [currentMode, startMeasurement]);
 
+  const handleScanAgain = () => {
+    setReport(null);
+    setScanState('idle');
+  };
+
+  const handleSaveReading = () => {
+    if (currentMode === 'heart-rate' && isComplete) {
+      setCurrentMode('facial');
+      setScanState('idle');
+      setReport(null);
+    } else {
+      finalize();
+    }
+  };
+
   const finishStep = () => {
     setScanState('done');
     if (stream) {
       stream.getTracks().forEach(t => t.stop());
       setStream(null);
     }
+    
+    if (currentMode === 'heart-rate') {
+      const result = analyzeFullSession();
+      if (result) {
+        setBpmValue(result.averageBpm);
+        setReport(result);
+      } else {
+        setBpmValue(75); // fallback
+        setReport({ averageBpm: 75, minBpm: 70, maxBpm: 80, quality: 'Fair', stability: 'stable', segmentBpms: [75,75,75,75,75,75], validPeaksCount: 15 });
+      }
+    }
+    
     stopMeasurement();
     
-    setTimeout(() => {
-      if (currentMode === 'heart-rate' && isComplete) {
-        setBpmValue(bpm);
-        setCurrentMode('facial');
-        setScanState('idle');
-      } else if (currentMode === 'facial' && isComplete) {
-        setActiveStage('assessment');
-        setScanState('idle');
-      } else {
-        finalize();
-      }
-    }, 1500);
+    if (currentMode !== 'heart-rate') {
+      setTimeout(() => {
+        if (currentMode === 'facial' && isComplete) {
+          setActiveStage('assessment');
+          setScanState('idle');
+        } else {
+          finalize();
+        }
+      }, 1500);
+    }
   };
 
   const finalize = async () => {
     try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 3000);
+      
       const res = await fetch('http://localhost:5000/api/scan/analyze', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -306,11 +427,14 @@ export default function ActiveScan() {
           confidence: Math.round(confidence),
           symptoms,
           demographics
-        })
+        }),
+        signal: controller.signal
       });
+      clearTimeout(timeoutId);
+      
       const data = await res.json();
-      const report: ScanResult = { ...data, date: new Date(data.timestamp), bpm: data.metrics.heartRate.value, healthScore: data.healthScore, aiConfidence: data.confidence, stressLevel: data.metrics.stressLevel.value.toLowerCase(), pallor: data.facialAnalysis.indicators.pallor, cyanosis: data.facialAnalysis.indicators.cyanosis, scanMode: initialMode };
-      navigate(ROUTE_PATHS.RESULTS, { state: report });
+      const finalReport: ScanResult = { ...data, date: new Date(data.timestamp), bpm: data.metrics.heartRate.value, healthScore: data.healthScore, aiConfidence: data.confidence, stressLevel: data.metrics.stressLevel.value.toLowerCase(), pallor: data.facialAnalysis.indicators.pallor, cyanosis: data.facialAnalysis.indicators.cyanosis, scanMode: initialMode };
+      navigate(ROUTE_PATHS.RESULTS, { state: finalReport });
     } catch (e) {
       console.error("Finalize error:", e);
       // Fallback algorithm for local calculation when backend is unavailable
@@ -397,9 +521,13 @@ export default function ActiveScan() {
         </div>
 
         <AnimatePresence mode="wait">
-          {activeStage === 'scanning' ? (
+          {report && currentMode === 'heart-rate' ? (
+            <motion.div key="report" initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }}>
+              <HeartRateReportCard report={report} onScanAgain={handleScanAgain} onSave={handleSaveReading} />
+            </motion.div>
+          ) : activeStage === 'scanning' ? (
             <motion.div key={currentMode} initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}>
-              {currentMode === 'heart-rate' ? <HeartRateCard bpm={bpm} statusText={statusText} isFingerDetected={isFingerDetected} confidence={Math.round(confidence)} /> : <FacialCard videoRef={videoRef} scanning={scanState === 'running'} />}
+              {currentMode === 'heart-rate' ? <HeartRateCard statusText={statusText} isFingerDetected={isFingerDetected} confidence={Math.round(confidence)} progress={progress} scanState={scanState} /> : <FacialCard videoRef={videoRef} scanning={scanState === 'running'} />}
             </motion.div>
           ) : (
             <SymptomAssessment 

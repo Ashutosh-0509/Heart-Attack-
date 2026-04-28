@@ -171,22 +171,14 @@ export function useHeartRateMonitor() {
 
     if (!fingerDetected) {
       setStatusText('Place finger on camera');
-      setBpm(null);
-      signalBufferRef.current = [];
     } else {
       setStatusText('Reading signal...');
-
-      const now = performance.now();
-      signalBufferRef.current.push({ value: avgRed, time: now });
-
-      if (signalBufferRef.current.length > BUFFER_SIZE) {
-        signalBufferRef.current.shift();
-      }
-
-      if (signalBufferRef.current.length > FPS * 1) {
-        analyzeSignal();
-      }
     }
+
+    const now = performance.now();
+    signalBufferRef.current.push({ value: avgRed, time: now });
+
+
 
     animationIdRef.current = requestAnimationFrame(processFrame);
   }, [analyzeSignal]);
@@ -277,6 +269,114 @@ export function useHeartRateMonitor() {
     doStop();
   }, [doStop]);
 
+  const analyzeFullSession = useCallback(() => {
+    const values = signalBufferRef.current.map(p => p.value);
+    if (values.length === 0) return null;
+
+    // Moving average smoothing (window = 5)
+    const smoothed: number[] = [];
+    const win = 5;
+    const halfWin = Math.floor(win / 2);
+    for (let i = 0; i < values.length; i++) {
+      let sum = 0;
+      let count = 0;
+      for (let j = Math.max(0, i - halfWin); j <= Math.min(values.length - 1, i + halfWin); j++) {
+        sum += values[j];
+        count++;
+      }
+      smoothed.push(sum / count);
+    }
+
+    const mean = smoothed.reduce((a, b) => a + b, 0) / smoothed.length;
+
+    // Detect ALL peaks above the signal mean
+    const peaks: { time: number; index: number; value: number }[] = [];
+    for (let i = 1; i < smoothed.length - 1; i++) {
+      if (smoothed[i] > smoothed[i - 1] && smoothed[i] > smoothed[i + 1] && smoothed[i] > mean) {
+        peaks.push({ time: signalBufferRef.current[i].time, index: i, value: smoothed[i] });
+      }
+    }
+
+    // Filter peaks: only keep intervals between 300ms-1500ms
+    const validIntervals: number[] = [];
+    let prevTime = peaks.length > 0 ? peaks[0].time : 0;
+    
+    for (let i = 1; i < peaks.length; i++) {
+      const interval = peaks[i].time - prevTime;
+      if (interval >= 300 && interval <= 1500) {
+        validIntervals.push(interval);
+      }
+      prevTime = peaks[i].time;
+    }
+
+    let averageBpm = 0;
+    if (validIntervals.length > 0) {
+      const avgInterval = validIntervals.reduce((a, b) => a + b, 0) / validIntervals.length;
+      averageBpm = Math.round(60000 / avgInterval);
+    }
+
+    const bpms = validIntervals.map(inv => 60000 / inv);
+    const minBpm = bpms.length > 0 ? Math.round(Math.min(...bpms)) : 0;
+    const maxBpm = bpms.length > 0 ? Math.round(Math.max(...bpms)) : 0;
+
+    const totalDuration = signalBufferRef.current.length > 0 
+      ? signalBufferRef.current[signalBufferRef.current.length - 1].time - signalBufferRef.current[0].time 
+      : 0;
+    
+    const segmentBpms: number[] = [];
+    const segmentsCount = 6;
+    const segmentDuration = totalDuration / segmentsCount;
+    const startTime = signalBufferRef.current.length > 0 ? signalBufferRef.current[0].time : 0;
+
+    for (let i = 0; i < segmentsCount; i++) {
+      const segStart = startTime + i * segmentDuration;
+      const segEnd = segStart + segmentDuration;
+      
+      const segPeaks = peaks.filter(p => p.time >= segStart && p.time < segEnd);
+      const segIntervals: number[] = [];
+      for(let j = 1; j < segPeaks.length; j++) {
+        const interval = segPeaks[j].time - segPeaks[j-1].time;
+        if (interval >= 300 && interval <= 1500) {
+          segIntervals.push(interval);
+        }
+      }
+      if (segIntervals.length > 0) {
+        const avgInv = segIntervals.reduce((a,b)=>a+b,0)/segIntervals.length;
+        segmentBpms.push(Math.round(60000 / avgInv));
+      } else {
+        segmentBpms.push(0);
+      }
+    }
+
+    for(let i=0; i<segmentBpms.length; i++) {
+      if (segmentBpms[i] === 0) segmentBpms[i] = averageBpm;
+    }
+
+    const validPeaksCount = validIntervals.length > 0 ? validIntervals.length + 1 : 0;
+    let quality = 'Poor';
+    if (validPeaksCount > 25) quality = 'Good';
+    else if (validPeaksCount > 10) quality = 'Fair';
+
+    let stability = 'stable';
+    if (bpms.length > 0) {
+      const meanBpm = bpms.reduce((a,b)=>a+b,0)/bpms.length;
+      const variance = bpms.reduce((a,b)=>a + Math.pow(b - meanBpm, 2), 0) / bpms.length;
+      if (Math.sqrt(variance) > 10) stability = 'irregular';
+    } else {
+      stability = 'irregular';
+    }
+
+    return {
+      averageBpm,
+      minBpm,
+      maxBpm,
+      quality,
+      stability,
+      segmentBpms,
+      validPeaksCount
+    };
+  }, []);
+
   return {
     bpm,
     statusText,
@@ -284,6 +384,7 @@ export function useHeartRateMonitor() {
     isFingerDetected,
     startMeasurement,
     stopMeasurement,
+    analyzeFullSession,
     signalBufferRef,
     lastBeatTime
   };
