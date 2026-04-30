@@ -1,5 +1,5 @@
 import { NavLink } from 'react-router-dom';
-import { Home, Heart, Clock, Settings } from 'lucide-react';
+import { Home, Heart, Clock, Settings, Users } from 'lucide-react';
 import { ROUTE_PATHS } from '@/lib/index';
 
 interface LayoutProps {
@@ -10,6 +10,7 @@ export function Layout({ children }: LayoutProps) {
   const navItems = [
     { path: ROUTE_PATHS.HOME, icon: Home, label: 'Home' },
     { path: ROUTE_PATHS.SCAN_SELECT, icon: Heart, label: 'Scan' },
+    { path: ROUTE_PATHS.CARE, icon: Users, label: 'Care' },
     { path: ROUTE_PATHS.HISTORY, icon: Clock, label: 'History' },
     { path: ROUTE_PATHS.SETTINGS, icon: Settings, label: 'Settings' }
   ];

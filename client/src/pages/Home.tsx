@@ -2,8 +2,11 @@ import { Link } from 'react-router-dom';
 import { ShieldCheck, Activity, Camera, Mic, Heart } from 'lucide-react';
 import { ROUTE_PATHS } from '@/lib/index';
 import { Layout } from '@/components/Layout';
+import { useVoiceAssistant } from '@/hooks/useVoiceAssistant';
 
 export default function Home() {
+  useVoiceAssistant(); // Initialize voice listening on Home page
+
   return (
     <Layout>
       <div className="min-h-screen bg-background flex flex-col items-center justify-center p-5">

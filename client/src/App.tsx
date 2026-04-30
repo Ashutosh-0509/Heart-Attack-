@@ -11,6 +11,7 @@ import Results from "@/pages/Results";
 import History from "@/pages/History";
 import Settings from "@/pages/Settings";
 import CvdPredictor from "@/pages/CvdPredictor";
+import Care from "@/pages/Care";
 
 const queryClient = new QueryClient();
 
@@ -28,6 +29,7 @@ const App = () => (
           <Route path={ROUTE_PATHS.HISTORY} element={<History />} />
           <Route path={ROUTE_PATHS.SETTINGS} element={<Settings />} />
           <Route path={ROUTE_PATHS.CVD_PREDICTOR} element={<CvdPredictor />} />
+          <Route path={ROUTE_PATHS.CARE} element={<Care />} />
         </Routes>
       </HashRouter>
     </TooltipProvider>

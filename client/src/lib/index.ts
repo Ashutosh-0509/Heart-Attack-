@@ -5,7 +5,8 @@ export const ROUTE_PATHS = {
   RESULTS: '/results',
   HISTORY: '/history',
   SETTINGS: '/settings',
-  CVD_PREDICTOR: '/cvd-predictor'
+  CVD_PREDICTOR: '/cvd-predictor',
+  CARE: '/care'
 } as const;
 
 export type ScanMode = 'heart-rate' | 'facial' | 'complete';
@@ -21,6 +22,12 @@ export interface ScanResult {
   cyanosis: boolean;
   scanMode: ScanMode;
   duration: number;
+  bpEstimate?: {
+    systolic: number;
+    diastolic: number;
+    category: string;
+    color: string;
+  };
   // Extended metrics from backend
   metrics?: {
     heartRate: { value: number; unit: string; status: string };
