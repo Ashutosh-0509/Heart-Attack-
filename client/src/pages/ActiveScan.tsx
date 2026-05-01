@@ -15,7 +15,7 @@ export default function ActiveScan() {
     initialMode === 'facial' ? 'facial' : 'heart-rate'
   );
   
-  const [timeLeft, setTimeLeft] = useState(30);
+  const [timeLeft, setTimeLeft] = useState(45);
   const [scanState, setScanState] = useState<'idle' | 'running' | 'done'>('idle');
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -33,7 +33,7 @@ export default function ActiveScan() {
 
   const startStage = async (stage: 'heart-rate' | 'facial') => {
     setScanState('running');
-    const duration = stage === 'heart-rate' ? 30 : 15;
+    const duration = stage === 'heart-rate' ? 45 : 15;
     setTimeLeft(duration);
 
     if (stage === 'heart-rate') {
@@ -97,7 +97,7 @@ export default function ActiveScan() {
       pallor: false,
       cyanosis: false,
       scanMode: initialMode,
-      duration: 30,
+      duration: 45,
       bpEstimate: bp
     };
     navigate(ROUTE_PATHS.RESULTS, { state: finalReport });
@@ -111,7 +111,7 @@ export default function ActiveScan() {
     };
   }, [currentStage]);
 
-  const progress = currentStage === 'heart-rate' ? ((30 - timeLeft) / 30) * 100 : ((15 - timeLeft) / 15) * 100;
+  const progress = currentStage === 'heart-rate' ? ((45 - timeLeft) / 45) * 100 : ((15 - timeLeft) / 15) * 100;
 
   return (
     <div className="min-h-screen bg-[#fafafa] font-sans text-gray-900 flex flex-col items-center py-4 px-4 sm:px-6">
@@ -153,7 +153,7 @@ export default function ActiveScan() {
                 </li>
                 <li className="flex gap-3">
                   <span className="text-gray-400 font-medium">4.</span>
-                  <span className="text-blue-600 font-medium leading-tight">Wait for 30 seconds</span>
+                  <span className="text-blue-600 font-medium leading-tight">Wait for 45 seconds</span>
                 </li>
               </ol>
             </div>
@@ -170,7 +170,7 @@ export default function ActiveScan() {
 
               <div className="text-center mb-6">
                 <span className="text-5xl font-black text-gray-800 tabular-nums tracking-tighter">
-                  {bpm || '-- --'}
+                  {bpm ?? '--'}
                 </span>
                 <p className="text-[11px] font-bold text-gray-400 tracking-widest uppercase mt-1">BPM</p>
               </div>

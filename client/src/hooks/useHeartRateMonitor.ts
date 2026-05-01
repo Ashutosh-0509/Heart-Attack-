@@ -16,11 +16,11 @@ export interface BPResult {
 
 // CONSTANTS
 const CAPTURE_SIZE = 32; 
-const SCAN_DURATION = 30000;
+const SCAN_DURATION = 45000;
 const EMA_ALPHA = 0.2;
 const MIN_PEAK_INTERVAL = 300; // ms (max 200 BPM)
 const MAX_PEAK_INTERVAL = 1500; // ms (min 40 BPM)
-const FINGER_THRESHOLD = 150; // avgRed must exceed this
+const FINGER_THRESHOLD = 60; // avgRed must exceed this
 
 export function useHeartRateMonitor() {
   const [bpm, setBpm] = useState<number | null>(null);
@@ -38,6 +38,8 @@ export function useHeartRateMonitor() {
   const animationIdRef = useRef<number | null>(null);
   const signalBufferRef = useRef<SignalPoint[]>([]);
   const emaValueRef = useRef<number | null>(null);
+  const bpmHistoryRef = useRef<number[]>([]);
+  const lastValidBpmRef = useRef<number | null>(null);
 
   useEffect(() => {
     if (!videoRef.current) {
@@ -87,7 +89,7 @@ export function useHeartRateMonitor() {
 
     const mean = values.reduce((a,b)=>a+b,0)/values.length;
     const std  = Math.sqrt(values.map(v=>(v-mean)**2).reduce((a,b)=>a+b)/values.length);
-    const threshold = mean + 0.3 * std;
+    const threshold = 0.3 * std;
 
     const peaks = [];
     let lastPeakTime = 0;
@@ -102,7 +104,7 @@ export function useHeartRateMonitor() {
       }
     }
 
-    if (peaks.length < 3) return null;
+    if (peaks.length < 2) return null;
 
     const intervals = [];
     for (let i = 1; i < peaks.length; i++) {
@@ -132,13 +134,20 @@ export function useHeartRateMonitor() {
     ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
     const data = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
 
-    let r = 0;
+    // Captured colors
+    let r = 0, g = 0, b = 0;
     for (let i = 0; i < data.length; i += 4) {
       r += data[i];
+      g += data[i+1];
+      b += data[i+2];
     }
-    const avgR = r / (data.length / 4);
+    const count = data.length / 4;
+    const avgR = r / count;
+    const avgG = g / count;
+    const avgB = b / count;
 
-    const fingerDetected = avgR > FINGER_THRESHOLD;
+    // Lenient finger detection
+    const fingerDetected = avgR > 60 && avgR < 240 && avgR > avgG * 1.2 && avgR > avgB * 1.2;
     setIsFingerDetected(fingerDetected);
 
     if (!fingerDetected) {
@@ -173,6 +182,25 @@ export function useHeartRateMonitor() {
         ema: emaValueRef.current,
         filtered: filtered
       });
+
+      // Live BPM Update (every ~1 second)
+      if (signalBufferRef.current.length > 150 && signalBufferRef.current.length % 30 === 0) {
+        const liveBpm = calculateFinalBPM(signalBufferRef.current.slice(-300));
+        if (liveBpm) {
+          const history = bpmHistoryRef.current;
+          history.push(liveBpm);
+          if (history.length > 5) history.shift();
+          
+          const smoothedBpm = Math.round(history.reduce((a,b)=>a+b,0)/history.length);
+          const lastValid = lastValidBpmRef.current;
+          
+          // Show BPM immediately if it's the first reading or stable enough
+          if (lastValid === null || Math.abs(smoothedBpm - lastValid) < 20 || history.length >= 3) {
+            setBpm(smoothedBpm);
+            lastValidBpmRef.current = smoothedBpm;
+          }
+        }
+      }
     }
 
     animationIdRef.current = requestAnimationFrame(processFrame);
@@ -188,8 +216,8 @@ export function useHeartRateMonitor() {
     }
     
     // Calculate final results if buffer is large enough
-    if (signalBufferRef.current.length > 300) {
-      const finalBpm = calculateFinalBPM(signalBufferRef.current);
+    if (signalBufferRef.current.length > 50) {
+      const finalBpm = calculateFinalBPM(signalBufferRef.current) || estimateBPMFromSignal(signalBufferRef.current);
       if (finalBpm) {
         setBpm(finalBpm);
         const finalBp = estimateBP(finalBpm);
@@ -200,6 +228,20 @@ export function useHeartRateMonitor() {
     signalBufferRef.current = [];
     emaValueRef.current = null;
   }, []);
+
+  function estimateBPMFromSignal(buffer: SignalPoint[]) {
+    if (buffer.length < 30) return null;
+    const values = buffer.map(b => b.value);
+    const mean = values.reduce((a,b)=>a+b,0)/values.length;
+    let crossings = 0;
+    for (let i = 1; i < values.length; i++) {
+      if ((values[i] > mean) !== (values[i-1] > mean)) crossings++;
+    }
+    const durationSec = (buffer[buffer.length-1].time - buffer[0].time) / 1000;
+    if (durationSec <= 0) return null;
+    const bpmVal = Math.round((crossings / 2) / durationSec * 60);
+    return (bpmVal >= 45 && bpmVal <= 150) ? bpmVal : null;
+  }
 
   const startMeasurement = async () => {
     try {
