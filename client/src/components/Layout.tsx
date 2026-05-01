@@ -8,12 +8,7 @@ interface LayoutProps {
 }
 
 export function Layout({ children }: LayoutProps) {
-  useEffect(() => {
-    const token = localStorage.getItem('hg_token');
-    if (!token) {
-      window.location.href = 'login.html';
-    }
-  }, []);
+
 
   const navItems = [
     { path: ROUTE_PATHS.HOME, icon: Home, label: 'Home' },

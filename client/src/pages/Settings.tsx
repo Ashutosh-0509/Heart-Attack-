@@ -43,8 +43,8 @@ export default function Settings() {
                 <User className="w-8 h-8 text-primary" />
               </div>
               <div>
-                <h2 className="text-xl font-semibold">Health User</h2>
-                <p className="text-sm text-muted-foreground">Guest Mode</p>
+                <h2 className="text-xl font-semibold">Guest User</h2>
+                <p className="text-sm text-muted-foreground">guest@heartguard.app</p>
               </div>
             </div>
           </div>

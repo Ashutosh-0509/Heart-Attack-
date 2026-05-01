@@ -136,7 +136,7 @@ export default function Results() {
              <p className="text-lg font-bold text-gray-900 mt-1">Clinical Heart Rate Summary</p>
            </div>
            <div className="text-right text-xs text-gray-500">
-             <p className="font-bold">Patient: Ashutosh Amale</p>
+             <p className="font-bold">Patient: Guest User</p>
              <p>{new Date().toLocaleString()}</p>
            </div>
         </div>
