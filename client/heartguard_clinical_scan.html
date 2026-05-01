@@ -1,0 +1,390 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HeartGuard Pro — Clinical Health Scan</title>
+    
+    <!-- Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&display=swap" rel="stylesheet">
+    
+    <!-- Bootstrap 5 -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+
+    <style>
+        body {
+            font-family: 'DM Sans', sans-serif;
+            background-color: #f8f9fa;
+            color: #1a1a1a;
+            min-height: 100vh;
+        }
+
+        .scan-container {
+            max-width: 440px;
+            margin: 0 auto;
+            padding: 2rem;
+            text-align: center;
+        }
+
+        .heart-header {
+            margin-bottom: 2rem;
+        }
+
+        .scan-card {
+            background: white;
+            border-radius: 32px;
+            padding: 2.5rem;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.05);
+            margin-bottom: 2rem;
+        }
+
+        .camera-preview {
+            width: 140px;
+            height: 140px;
+            border-radius: 50%;
+            background: #eee;
+            margin: 0 auto 1.5rem;
+            overflow: hidden;
+            border: 4px solid #fff;
+            box-shadow: 0 0 0 4px #E24B4A;
+            position: relative;
+        }
+
+        #video {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .bpm-display {
+            font-size: 4rem;
+            font-weight: 700;
+            line-height: 1;
+            margin-bottom: 0.5rem;
+        }
+
+        .unit {
+            font-size: 1rem;
+            color: #6c757d;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+        }
+
+        .progress-circle-container {
+            position: relative;
+            width: 180px;
+            height: 180px;
+            margin: 0 auto 2rem;
+        }
+
+        .progress-svg {
+            transform: rotate(-90deg);
+        }
+
+        .progress-bg {
+            fill: none;
+            stroke: #f1f1f1;
+            stroke-width: 10;
+        }
+
+        .progress-bar {
+            fill: none;
+            stroke: #E24B4A;
+            stroke-width: 10;
+            stroke-linecap: round;
+            transition: stroke-dashoffset 0.1s linear;
+        }
+
+        .btn-hg {
+            background: #E24B4A;
+            color: white;
+            border: none;
+            border-radius: 16px;
+            padding: 18px 40px;
+            font-weight: 700;
+            width: 100%;
+            font-size: 1.1rem;
+            transition: transform 0.2s, opacity 0.2s;
+        }
+
+        .btn-hg:active {
+            transform: scale(0.98);
+        }
+
+        .btn-hg:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+
+        .status-badge {
+            display: inline-block;
+            padding: 6px 16px;
+            border-radius: 20px;
+            font-size: 0.85rem;
+            font-weight: 700;
+            margin-bottom: 1.5rem;
+        }
+
+        .status-reading { background: #fff5f5; color: #E24B4A; }
+        .status-ready { background: #f1f3f5; color: #6c757d; }
+
+        /* Results Card */
+        #result-card {
+            display: none;
+            animation: slideUp 0.5s ease-out;
+        }
+
+        @keyframes slideUp {
+            from { transform: translateY(20px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+
+        .score-box {
+            background: #E24B4A;
+            color: white;
+            border-radius: 24px;
+            padding: 2rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .metric-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1rem;
+        }
+
+        .metric-card {
+            background: #f8f9fa;
+            border-radius: 20px;
+            padding: 1.25rem;
+            text-align: left;
+        }
+
+        .metric-label {
+            font-size: 0.75rem;
+            font-weight: 700;
+            color: #adb5bd;
+            text-transform: uppercase;
+            margin-bottom: 0.25rem;
+        }
+
+        .metric-val {
+            font-size: 1.5rem;
+            font-weight: 700;
+        }
+
+        .disclaimer {
+            font-size: 0.7rem;
+            color: #888;
+            margin-top: 1.5rem;
+            line-height: 1.4;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="scan-container">
+        <div class="heart-header">
+            <h1 class="fw-bold h3 mb-1">Clinical Scan</h1>
+            <p class="text-muted small">Stay still for 30 seconds</p>
+        </div>
+
+        <div id="scan-view" class="scan-card">
+            <div id="status-badge" class="status-badge status-ready">Ready to Scan</div>
+            
+            <div class="camera-preview">
+                <video id="video" autoplay playsinline></video>
+            </div>
+
+            <div class="progress-circle-container">
+                <svg class="progress-svg" width="180" height="180">
+                    <circle class="progress-bg" cx="90" cy="90" r="80"></circle>
+                    <circle id="progress-bar" class="progress-bar" cx="90" cy="90" r="80" stroke-dasharray="502.6" stroke-dashoffset="502.6"></circle>
+                </svg>
+                <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);">
+                    <div id="bpm-live" class="bpm-display">--</div>
+                    <div class="unit">BPM</div>
+                </div>
+            </div>
+
+            <button id="start-btn" class="btn btn-hg" onclick="startScan()">Start 30s Scan</button>
+        </div>
+
+        <div id="result-card" class="scan-card">
+            <div class="score-box text-center">
+                <p class="text-white-50 text-uppercase small fw-bold mb-1">Health Score</p>
+                <h1 id="health-score" class="display-3 fw-bold mb-2">--</h1>
+                <div id="health-label" class="badge bg-white bg-opacity-25 rounded-pill px-3 py-2 fw-bold small">Calculating...</div>
+            </div>
+
+            <div class="metric-grid">
+                <div class="metric-card">
+                    <p class="metric-label">Heart Rate</p>
+                    <div class="d-flex align-items-baseline gap-1">
+                        <span id="bpm-display" class="metric-val">--</span>
+                        <span class="small text-muted fw-bold">BPM</span>
+                    </div>
+                </div>
+                <div class="metric-card">
+                    <p class="metric-label">Blood Pressure</p>
+                    <div id="bp-display" class="metric-val text-nowrap">--</div>
+                    <div id="bp-label" class="small fw-bold mt-1">--</div>
+                    <small style="color:#888; font-size: 8px; display: block; margin-top: 4px;">⚠️ BP estimated from BPM — use a cuff for accuracy</small>
+                </div>
+            </div>
+
+            <button class="btn btn-hg mt-4" onclick="location.reload()">New Scan</button>
+            <p class="disclaimer">HeartGuard uses computer vision for PPG analysis. This is an experimental clinical tool and NOT a replacement for medical diagnosis by a professional.</p>
+        </div>
+    </div>
+
+    <canvas id="processingCanvas" width="32" height="32" style="display:none;"></canvas>
+
+    <script>
+        let signalBuffer = [];
+        let isScanning = false;
+        let startTime = 0;
+        const SCAN_DURATION = 30000;
+        const video = document.getElementById('video');
+        const canvas = document.getElementById('processingCanvas');
+        const ctx = canvas.getContext('2d', { willReadFrequently: true });
+        const progressBar = document.getElementById('progress-bar');
+        const dashArray = 502.6;
+
+        async function startScan() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ 
+                    video: { facingMode: 'environment' }, 
+                    audio: false 
+                });
+                video.srcObject = stream;
+                
+                // Try to enable torch
+                const track = stream.getVideoTracks()[0];
+                try {
+                    const capabilities = track.getCapabilities();
+                    if (capabilities.torch) {
+                        await track.applyConstraints({ advanced: [{ torch: true }] });
+                    }
+                } catch(e) {}
+
+                document.getElementById('start-btn').disabled = true;
+                document.getElementById('status-badge').textContent = 'Scanning...';
+                document.getElementById('status-badge').className = 'status-badge status-reading';
+                
+                isScanning = true;
+                startTime = Date.now();
+                signalBuffer = [];
+                requestAnimationFrame(processFrame);
+
+                setTimeout(finishScan, SCAN_DURATION);
+            } catch (err) {
+                alert("Camera access required for health scan.");
+            }
+        }
+
+        function processFrame() {
+            if (!isScanning) return;
+
+            const elapsed = Date.now() - startTime;
+            const progress = elapsed / SCAN_DURATION;
+            progressBar.style.strokeDashoffset = dashArray * (1 - progress);
+
+            // Capture 32x32 area
+            ctx.drawImage(video, 0, 0, 32, 32);
+            const data = ctx.getImageData(0, 0, 32, 32).data;
+            
+            let redSum = 0;
+            for (let i = 0; i < data.length; i += 4) {
+                redSum += data[i];
+            }
+            const avgRed = redSum / (data.length / 4);
+
+            signalBuffer.push({ val: avgRed, time: Date.now() });
+            
+            // Live BPM (rough estimate every 2 seconds)
+            if (signalBuffer.length > 100 && signalBuffer.length % 60 === 0) {
+                const recentBpm = calculateBPM(signalBuffer.slice(-150));
+                if (recentBpm) document.getElementById('bpm-live').textContent = recentBpm;
+            }
+
+            requestAnimationFrame(processFrame);
+        }
+
+        function calculateBPM(buffer) {
+            if (buffer.length < 50) return null;
+            const vals = buffer.map(b => b.val);
+            const mean = vals.reduce((a,b)=>a+b)/vals.length;
+            const filtered = vals.map(v => v - mean);
+            
+            let peaks = 0;
+            for (let i = 1; i < filtered.length - 1; i++) {
+                if (filtered[i] > filtered[i-1] && filtered[i] > filtered[i+1] && filtered[i] > 0) {
+                    peaks++;
+                }
+            }
+            const durationSec = (buffer[buffer.length-1].time - buffer[0].time) / 1000;
+            return Math.round((peaks / durationSec) * 60);
+        }
+
+        function finishScan() {
+            isScanning = false;
+            if (video.srcObject) {
+                video.srcObject.getTracks().forEach(t => t.stop());
+            }
+
+            const realBPM = calculateBPM(signalBuffer);
+            if (realBPM && realBPM > 40 && realBPM < 200) {
+                displayRealResult(realBPM);
+            } else {
+                document.getElementById('scan-view').innerHTML = 
+                    '<p style="color:#E24B4A; font-weight: 700; margin-top: 2rem;">❌ Signal too weak — cover camera fully and try again</p>' +
+                    '<button class="btn btn-hg mt-4" onclick="location.reload()">Try Again</button>';
+            }
+        }
+
+        function displayRealResult(realBPM) {
+            document.getElementById('scan-view').style.display = 'none';
+
+            // REAL BPM from algorithm
+            document.getElementById('bpm-display').textContent = realBPM;
+
+            // Calculate BP from real BPM
+            const sys = Math.round(120 + (realBPM - 72) * 0.5);
+            const dia = Math.round(80 + (realBPM - 72) * 0.3);
+            const systolic  = Math.min(180, Math.max(85, sys));
+            const diastolic = Math.min(110, Math.max(55, dia));
+            document.getElementById('bp-display').textContent = systolic + '/' + diastolic;
+
+            // Calculate Health Score from real BPM
+            let score = 100;
+            if (realBPM < 60 || realBPM > 100) score -= 20;
+            else if (realBPM < 65 || realBPM > 90) score -= 8;
+            if (systolic >= 140) score -= 20;
+            else if (systolic >= 130) score -= 10;
+            score = Math.max(0, Math.min(100, score));
+            document.getElementById('health-score').textContent = score;
+
+            // BP Category
+            let bpLabel, bpColor;
+            if (systolic < 120 && diastolic < 80) { bpLabel = 'NORMAL ✅'; bpColor = '#1D9E75'; }
+            else if (systolic < 130) { bpLabel = 'ELEVATED ⚠️'; bpColor = '#EF9F27'; }
+            else if (systolic < 140) { bpLabel = 'STAGE 1 🔴'; bpColor = '#E24B4A'; }
+            else { bpLabel = 'STAGE 2 🔴'; bpColor = '#A32D2D'; }
+            document.getElementById('bp-label').textContent = bpLabel;
+            document.getElementById('bp-label').style.color = bpColor;
+
+            // Health Score label
+            let scoreLabel;
+            if (score >= 85) scoreLabel = 'Strong Clinical Markers';
+            else if (score >= 70) scoreLabel = 'Good — Minor Concerns';
+            else if (score >= 50) scoreLabel = 'Moderate Risk Indicators';
+            else scoreLabel = 'High Risk — See a Doctor';
+            document.getElementById('health-label').textContent = scoreLabel;
+
+            // Show result card
+            document.getElementById('result-card').style.display = 'block';
+        }
+    </script>
+</body>
+</html>

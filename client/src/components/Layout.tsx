@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { NavLink } from 'react-router-dom';
 import { Home, Heart, Clock, Settings, Users } from 'lucide-react';
 import { ROUTE_PATHS } from '@/lib/index';
@@ -7,6 +8,13 @@ interface LayoutProps {
 }
 
 export function Layout({ children }: LayoutProps) {
+  useEffect(() => {
+    const token = localStorage.getItem('hg_token');
+    if (!token) {
+      window.location.href = 'login.html';
+    }
+  }, []);
+
   const navItems = [
     { path: ROUTE_PATHS.HOME, icon: Home, label: 'Home' },
     { path: ROUTE_PATHS.SCAN_SELECT, icon: Heart, label: 'Scan' },

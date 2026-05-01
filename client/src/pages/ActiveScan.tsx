@@ -175,19 +175,35 @@ export default function ActiveScan() {
                 <p className="text-[11px] font-bold text-gray-400 tracking-widest uppercase mt-1">BPM</p>
               </div>
 
+              {/* Signal Quality Bar */}
+              <div className="w-full mb-6">
+                <div className="flex justify-between items-center mb-2">
+                  <span className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Signal Quality</span>
+                  <span className={`text-[10px] font-bold uppercase ${signalQuality === 'good' ? 'text-green-500' : signalQuality === 'weak' ? 'text-amber-500' : 'text-red-500'}`}>
+                    {signalQuality === 'good' ? 'Good' : signalQuality === 'weak' ? 'Weak' : 'None'}
+                  </span>
+                </div>
+                <div className="w-full h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                  <div 
+                    className={`h-full transition-all duration-300 ${signalQuality === 'good' ? 'bg-green-500' : signalQuality === 'weak' ? 'bg-amber-500' : 'bg-red-500'}`}
+                    style={{ width: signalQuality === 'good' ? '100%' : signalQuality === 'weak' ? '40%' : '10%' }}
+                  />
+                </div>
+              </div>
+
               {/* Waveform */}
               <div className="flex items-end justify-center gap-1.5 h-16 w-full mb-8">
                 {Array.from({ length: 20 }).map((_, i) => {
                   const sampleIdx = Math.max(0, signalBuffer.length - 20 + i);
                   const sample = signalBuffer[sampleIdx];
-                  // Normalize sample value for display (assuming raw red is around 150-255)
+                  // Normalize sample filtered value for display
                   const height = isFingerDetected && sample 
-                    ? Math.min(100, Math.max(10, ((sample.value - 150) / 105) * 100)) 
+                    ? Math.min(100, Math.max(10, (Math.abs(sample.filtered) / 5) * 100)) 
                     : 10;
                   return (
                     <div 
                       key={i} 
-                      className="w-3.5 bg-blue-500 rounded-full transition-all duration-100 ease-out"
+                      className={`w-3.5 rounded-full transition-all duration-100 ease-out ${signalQuality === 'good' ? 'bg-blue-500' : 'bg-gray-300'}`}
                       style={{ height: `${height}%` }}
                     />
                   );
@@ -197,13 +213,13 @@ export default function ActiveScan() {
               <div className="w-full space-y-4 pt-4 border-t border-gray-50 text-[13px]">
                 <div className="flex justify-between items-center">
                   <span className="text-gray-400">Status:</span>
-                  <span className={`font-medium ${statusText.includes('Error') ? 'text-red-500' : 'text-gray-900'}`}>
-                    {isFingerDetected ? 'Reading signal...' : 'Error: NotReadableError'}
+                  <span className={`font-bold ${signalQuality === 'none' ? 'text-red-500' : signalQuality === 'weak' ? 'text-amber-500' : 'text-green-600'}`}>
+                    {statusText}
                   </span>
                 </div>
                 <div className="flex justify-between items-center">
-                  <span className="text-gray-400">Confidence:</span>
-                  <span className="font-bold text-gray-900">{Math.round(progress * 0.9 + 5)}%</span>
+                  <span className="text-gray-400">Time Remaining:</span>
+                  <span className="font-bold text-gray-900">{timeLeft}s</span>
                 </div>
               </div>
             </div>

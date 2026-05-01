@@ -231,7 +231,6 @@
     overflow-x: hidden;
     position: relative;
     width: 100%;
-    overscroll-behavior-y: none; /* Prevent pull-to-refresh on mobile */
   }
 
   * {

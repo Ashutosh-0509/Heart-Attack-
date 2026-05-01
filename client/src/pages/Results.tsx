@@ -64,7 +64,11 @@ export default function Results() {
             <p className="text-xs font-bold uppercase tracking-widest opacity-80 mb-2">Health Score</p>
             <h1 className="text-7xl font-black">{result.healthScore}</h1>
             <div className="mt-4 inline-flex items-center gap-2 bg-white/20 px-4 py-1.5 rounded-full text-xs font-bold">
-              <CheckCircle className="w-4 h-4" /> Strong Clinical Markers
+              <CheckCircle className="w-4 h-4" /> 
+              {result.healthScore >= 85 ? 'Strong Clinical Markers' : 
+               result.healthScore >= 70 ? 'Good — Minor Concerns' : 
+               result.healthScore >= 50 ? 'Moderate Risk Indicators' : 
+               'High Risk — See a Doctor'}
             </div>
           </div>
 
@@ -78,7 +82,10 @@ export default function Results() {
               <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Blood Pressure</p>
               <p className="text-xl font-black text-gray-900">
                 {result.bpEstimate ? `${result.bpEstimate.systolic}/${result.bpEstimate.diastolic}` : '118/76'} 
-                <span className="text-[10px] block font-bold text-green-500 uppercase mt-1">Normal ✅</span>
+                <span className={`text-[10px] block font-bold uppercase mt-1 ${result.bpEstimate?.color || 'text-green-500'}`}>
+                  {result.bpEstimate?.category || 'Normal ✅'}
+                </span>
+                <small className="block text-[8px] text-gray-400 font-normal mt-1">⚠️ BP estimated from BPM — use a cuff for accuracy</small>
               </p>
             </div>
           </div>

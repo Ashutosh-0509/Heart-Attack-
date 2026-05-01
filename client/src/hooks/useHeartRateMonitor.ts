@@ -3,6 +3,8 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 export interface SignalPoint {
   value: number;
   time: number;
+  ema: number;
+  filtered: number;
 }
 
 export interface BPResult {
@@ -12,11 +14,13 @@ export interface BPResult {
   color: string;
 }
 
-const WINDOW_SIZE_SECONDS = 10;
-const FPS = 30;
-const BUFFER_SIZE = FPS * WINDOW_SIZE_SECONDS;
-const ALPHA = 0.2; // EMA smoothing factor
-const MIN_PEAK_DISTANCE_MS = 300;
+// CONSTANTS
+const CAPTURE_SIZE = 32; 
+const SCAN_DURATION = 30000;
+const EMA_ALPHA = 0.2;
+const MIN_PEAK_INTERVAL = 300; // ms (max 200 BPM)
+const MAX_PEAK_INTERVAL = 1500; // ms (min 40 BPM)
+const FINGER_THRESHOLD = 150; // avgRed must exceed this
 
 export function useHeartRateMonitor() {
   const [bpm, setBpm] = useState<number | null>(null);
@@ -24,7 +28,7 @@ export function useHeartRateMonitor() {
   const [statusText, setStatusText] = useState<string>('Ready to start');
   const [isProcessing, setIsProcessing] = useState(false);
   const [isFingerDetected, setIsFingerDetected] = useState(false);
-  const [signalQuality, setSignalQuality] = useState<'Good' | 'Weak' | 'No Contact'>('No Contact');
+  const [signalQuality, setSignalQuality] = useState<'good' | 'weak' | 'none'>('none');
   
   const isProcessingRef = useRef(false);
   const streamRef = useRef<MediaStream | null>(null);
@@ -33,8 +37,7 @@ export function useHeartRateMonitor() {
   const processingCtxRef = useRef<CanvasRenderingContext2D | null>(null);
   const animationIdRef = useRef<number | null>(null);
   const signalBufferRef = useRef<SignalPoint[]>([]);
-  const lastBeatTimeRef = useRef(0);
-  const bpmHistoryRef = useRef<number[]>([]);
+  const emaValueRef = useRef<number | null>(null);
 
   useEffect(() => {
     if (!videoRef.current) {
@@ -43,8 +46,8 @@ export function useHeartRateMonitor() {
     }
     if (!processingCanvasRef.current) {
       processingCanvasRef.current = document.createElement('canvas');
-      processingCanvasRef.current.width = 50;
-      processingCanvasRef.current.height = 50;
+      processingCanvasRef.current.width = CAPTURE_SIZE;
+      processingCanvasRef.current.height = CAPTURE_SIZE;
       processingCtxRef.current = processingCanvasRef.current.getContext('2d', { willReadFrequently: true });
     }
     return () => doStop();
@@ -58,100 +61,66 @@ export function useHeartRateMonitor() {
     return { category: 'Stage 2 Hypertension 🔴', color: 'text-red-500' };
   };
 
-  const analyzeSignal = useCallback(() => {
-    if (signalBufferRef.current.length < 30) return;
+  const estimateBP = (avgBPM: number) => {
+    const sys = Math.round(120 + (avgBPM - 72) * 0.5);
+    const dia = Math.round(80 + (avgBPM - 72) * 0.3);
+    
+    const finalSys = Math.min(180, Math.max(85, sys));
+    const finalDia = Math.min(110, Math.max(55, dia));
+    const cat = getBpCategory(finalSys, finalDia);
+    
+    // Calculate Health Score
+    let score = 100;
+    if (avgBPM < 60 || avgBPM > 100) score -= 20;
+    else if (avgBPM < 65 || avgBPM > 90) score -= 8;
+    if (finalSys >= 140) score -= 20;
+    else if (finalSys >= 130) score -= 10;
+    score = Math.max(0, Math.min(100, score));
 
-    // 1. EMA Smoothing
-    const values = signalBufferRef.current.map(p => p.value);
-    const smoothed: number[] = [];
-    let ema = values[0];
-    for (let i = 0; i < values.length; i++) {
-      ema = ALPHA * values[i] + (1 - ALPHA) * ema;
-      smoothed.push(ema);
-    }
+    return { systolic: finalSys, diastolic: finalDia, score, ...cat };
+  };
 
-    // 2. High-Pass Filter (Remove slow drift)
-    const filtered: number[] = [];
-    const localWin = 30;
-    for (let i = 0; i < smoothed.length; i++) {
-      let sum = 0;
-      let count = 0;
-      for (let j = Math.max(0, i - localWin); j <= i; j++) {
-        sum += smoothed[j];
-        count++;
-      }
-      filtered.push(smoothed[i] - (sum / count));
-    }
+  const calculateFinalBPM = (signalBuffer: SignalPoint[]) => {
+    const values = signalBuffer.map(b => b.filtered);
+    const times  = signalBuffer.map(b => b.time);
+    if (values.length < 100) return null;
 
-    // 3. Peak Detection
-    const peaks: { time: number; value: number }[] = [];
-    const mean = filtered.reduce((a, b) => a + b, 0) / filtered.length;
-    const std = Math.sqrt(filtered.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / filtered.length);
+    const mean = values.reduce((a,b)=>a+b,0)/values.length;
+    const std  = Math.sqrt(values.map(v=>(v-mean)**2).reduce((a,b)=>a+b)/values.length);
     const threshold = mean + 0.3 * std;
 
-    for (let i = 1; i < filtered.length - 1; i++) {
-      if (filtered[i] > filtered[i - 1] && filtered[i] > filtered[i + 1] && filtered[i] > threshold) {
-        const time = signalBufferRef.current[i].time;
-        if (peaks.length === 0 || time - peaks[peaks.length - 1].time > MIN_PEAK_DISTANCE_MS) {
-          peaks.push({ time, value: filtered[i] });
+    const peaks = [];
+    let lastPeakTime = 0;
+    for (let i = 2; i < values.length - 2; i++) {
+      if (values[i] > threshold &&
+          values[i] > values[i-1] && values[i] > values[i-2] &&
+          values[i] > values[i+1] && values[i] > values[i+2]) {
+        if (times[i] - lastPeakTime > MIN_PEAK_INTERVAL) {
+          peaks.push(times[i]);
+          lastPeakTime = times[i];
         }
       }
     }
 
-    if (peaks.length < 2) return;
+    if (peaks.length < 3) return null;
 
-    // 4. Outlier Removal (Median + MAD)
-    const intervals: number[] = [];
+    const intervals = [];
     for (let i = 1; i < peaks.length; i++) {
-      intervals.push(peaks[i].time - peaks[i - 1].time);
+      const d = peaks[i] - peaks[i-1];
+      if (d >= MIN_PEAK_INTERVAL && d <= MAX_PEAK_INTERVAL) intervals.push(d);
     }
+    if (intervals.length === 0) return null;
 
-    const sortedIntervals = [...intervals].sort((a, b) => a - b);
-    const median = sortedIntervals[Math.floor(sortedIntervals.length / 2)];
-    const mad = [...intervals].map(x => Math.abs(x - median)).sort((a, b) => a - b)[Math.floor(intervals.length / 2)];
-    
-    const validIntervals = intervals.filter(x => Math.abs(x - median) < 2.5 * mad);
-    if (validIntervals.length === 0) return;
+    // MAD outlier removal
+    const sorted = [...intervals].sort((a,b)=>a-b);
+    const median = sorted[Math.floor(sorted.length/2)];
+    const mad = [...sorted.map(x=>Math.abs(x-median))].sort((a,b)=>a-b)[Math.floor(sorted.length/2)];
+    const clean = intervals.filter(x => Math.abs(x-median) < 2.5*(mad || 1));
+    if (clean.length === 0) return null;
 
-    // 5. BPM Calculation
-    const avgInterval = validIntervals.reduce((a, b) => a + b, 0) / validIntervals.length;
-    const rawBpm = 60000 / avgInterval;
-
-    // 6. Weighted Moving Average for final BPM
-    bpmHistoryRef.current.push(rawBpm);
-    if (bpmHistoryRef.current.length > 3) bpmHistoryRef.current.shift();
-    
-    let finalBpm = rawBpm;
-    if (bpmHistoryRef.current.length === 3) {
-      finalBpm = 0.2 * bpmHistoryRef.current[0] + 0.3 * bpmHistoryRef.current[1] + 0.5 * bpmHistoryRef.current[2];
-    }
-    setBpm(Math.round(finalBpm));
-
-    // 7. BP Estimation (Experimental PTT method)
-    const valleys: number[] = [];
-    for (let i = 1; i < filtered.length - 1; i++) {
-      if (filtered[i] < filtered[i - 1] && filtered[i] < filtered[i + 1]) {
-        valleys.push(i);
-      }
-    }
-
-    if (peaks.length > 0 && valleys.length > 0) {
-      const lastPeakIdx = peaks[peaks.length - 1].time; // Note: simplified for estimation
-      // Empirical formula for demonstration
-      const amplitude = Math.max(...filtered) - Math.min(...filtered);
-      const riseTime = 100; // Simplified
-      
-      const sys = 120 + (amplitude - 5) * 0.8 - (riseTime - 100) * 0.15;
-      const dia = 80 + (avgInterval - 800) * (-0.04);
-      
-      const finalSys = Math.min(180, Math.max(85, Math.round(sys)));
-      const finalDia = Math.min(110, Math.max(55, Math.round(dia)));
-      
-      const cat = getBpCategory(finalSys, finalDia);
-      setBp({ systolic: finalSys, diastolic: finalDia, ...cat });
-    }
-
-  }, []);
+    const avgInterval = clean.reduce((a,b)=>a+b)/clean.length;
+    return Math.round(60000 / avgInterval);
+  };
 
   const processFrame = useCallback(() => {
     if (!isProcessingRef.current) return;
@@ -163,37 +132,51 @@ export function useHeartRateMonitor() {
     ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
     const data = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
 
-    let r = 0, g = 0, b = 0;
+    let r = 0;
     for (let i = 0; i < data.length; i += 4) {
-      r += data[i]; g += data[i+1]; b += data[i+2];
+      r += data[i];
     }
     const avgR = r / (data.length / 4);
-    const avgG = g / (data.length / 4);
-    const avgB = b / (data.length / 4);
 
-    const fingerDetected = avgR > 150 && avgR > avgG * 1.2;
+    const fingerDetected = avgR > FINGER_THRESHOLD;
     setIsFingerDetected(fingerDetected);
 
     if (!fingerDetected) {
-      setSignalQuality('No Contact');
-      setStatusText('Place finger on camera');
+      setSignalQuality('none');
+      setStatusText('No finger detected — cover camera completely');
     } else {
-      // Calculate variance for signal quality
-      const samples = signalBufferRef.current.slice(-10).map(s => s.value);
-      const mean = samples.reduce((a, b) => a + b, 0) / (samples.length || 1);
-      const variance = samples.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / (samples.length || 1);
+      // EMA Smoothing
+      if (emaValueRef.current === null) emaValueRef.current = avgR;
+      emaValueRef.current = EMA_ALPHA * avgR + (1 - EMA_ALPHA) * emaValueRef.current;
       
-      if (variance < 0.5) setSignalQuality('Weak');
-      else setSignalQuality('Good');
+      // High Pass Filter
+      const last30 = signalBufferRef.current.slice(-30).map(b => b.ema);
+      const mean = last30.length > 0 ? last30.reduce((a,b)=>a+b,0) / last30.length : avgR;
+      const filtered = emaValueRef.current - mean;
+
+      // Signal quality check via variance
+      const last10 = signalBufferRef.current.slice(-10).map(b => b.ema);
+      const variance = last10.length > 0 ? 
+        last10.reduce((a,b)=>a+Math.pow(b-mean,2),0)/last10.length : 0;
       
-      setStatusText('Reading signal...');
-      signalBufferRef.current.push({ value: avgR, time: performance.now() });
-      if (signalBufferRef.current.length > BUFFER_SIZE) signalBufferRef.current.shift();
-      if (signalBufferRef.current.length % 15 === 0) analyzeSignal();
+      if (variance < 1.5) {
+        setSignalQuality('weak');
+        setStatusText('Weak signal — press harder');
+      } else {
+        setSignalQuality('good');
+        setStatusText('Good signal ✅');
+      }
+
+      signalBufferRef.current.push({ 
+        value: avgR, 
+        time: performance.now(),
+        ema: emaValueRef.current,
+        filtered: filtered
+      });
     }
 
     animationIdRef.current = requestAnimationFrame(processFrame);
-  }, [analyzeSignal]);
+  }, []);
 
   const doStop = useCallback(() => {
     isProcessingRef.current = false;
@@ -203,13 +186,25 @@ export function useHeartRateMonitor() {
       streamRef.current.getTracks().forEach(t => t.stop());
       streamRef.current = null;
     }
+    
+    // Calculate final results if buffer is large enough
+    if (signalBufferRef.current.length > 300) {
+      const finalBpm = calculateFinalBPM(signalBufferRef.current);
+      if (finalBpm) {
+        setBpm(finalBpm);
+        const finalBp = estimateBP(finalBpm);
+        setBp(finalBp);
+      }
+    }
+    
     signalBufferRef.current = [];
+    emaValueRef.current = null;
   }, []);
 
   const startMeasurement = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ 
-        video: { facingMode: 'environment', frameRate: { ideal: FPS } }, 
+        video: { facingMode: 'environment', frameRate: { ideal: 30 } }, 
         audio: false 
       });
       streamRef.current = stream;
